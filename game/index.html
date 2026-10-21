@@ -372,7 +372,7 @@ canvas { display: block; width: 100%; height: 100%; }
     t: 90, score: 0, lives: 3, combo: 0, comboT: 0, maxCombo: 0, caught: 0, clock: 0,
     ship: { x: W / 2, y: H - 170, vx: 0, vy: 0, inv: 0, lean: 0, trailT: 0 },
     boss: { stun: 0, guns: [{ ang: Math.PI / 2, recoil: 0, flash: 0 }, { ang: Math.PI / 2, recoil: 0, flash: 0 }], turn: 0, seq: [], last: null, cd: 2, next: 5, cast: null, castT: 0, say: null, sayCd: 1.5, bob: 0 },
-    items: [], balls: [], drops: [], mines: [], fx: [], trail: [], spray: [], spawn: 0, slow: 0,
+    items: [], balls: [], drops: [], mines: [], tides: [], safes: [], whirl: 0, fx: [], trail: [], spray: [], spawn: 0, slow: 0,
     shield: { cd: 0, act: 0 },
     fever: { used: false, idx: 0, t: 0, next: FEVERS.at(0), from: 0, spawn: 0, banner: 0 }
   });
@@ -480,7 +480,10 @@ canvas { display: block; width: 100%; height: 100%; }
     spiral: ["회오리 포격이다!", "빙글빙글 돌아라!"],
     burst: ["연속 사격!", "도망쳐 봐라!"],
     fan: ["부채꼴 일제 사격!", "이 넓이를 피할 수 있나?"],
-    mine: ["기뢰를 깔았다!", "발밑을 조심해라!"]
+    mine: ["기뢰를 깔았다!", "발밑을 조심해라!"],
+    wave: ["대해일이다! 틈으로 피해라!", "파도를 넘어 봐라!"],
+    bombard: ["총공격이다! 초록 원으로 피해!", "바다 전체를 폭격한다!"],
+    whirl: ["소용돌이에 빨려 들어와라!", "도망칠 수 있겠나?"]
   };
   const sayLine = (kind, force) => {
     const B = S.boss;
@@ -498,7 +501,7 @@ canvas { display: block; width: 100%; height: 100%; }
     for (let k = 0; k < 5; k++) S.fx.push({ x: mx, y: my - 8, vx: Math.cos(a) * 1.1 + (Math.random() - .5) * 1.4, vy: Math.sin(a) * .8 - Math.random(), life: 1, c: "rgba(235,240,248,.9)", r: 4 + Math.random() * 5, smoke: true });
     g.recoil = 1; g.flash = .12;
   };
-  const PATTERNS = ["barrage", "net", "rain", "ring", "spiral", "burst", "fan", "mine"];
+  const PATTERNS = ["barrage", "net", "rain", "ring", "spiral", "burst", "fan", "mine", "wave", "bombard", "whirl"];
   const castBoss = (level) => {
     const B = S.boss, sh = S.ship;
     if (B.cast === "barrage") { [0, 1].forEach((i) => [-.2, .2].forEach((d) => shoot(i, B.guns.at(i).ang + d, 190 + level * 70))); SFX.fire(); }
@@ -525,6 +528,25 @@ canvas { display: block; width: 100%; height: 100%; }
       for (let k = -3; k <= 3; k++) shoot(g, a0 + k * .17, 175 + level * 50);
       SFX.fire();
     }
+    if (B.cast === "wave") {                       // 대해일: 화면 전체를 쓸고 내려오는 파도, 틈 하나만 안전
+      const gw = 150 - level * 35, gx = gw / 2 + 24 + Math.random() * (W - gw - 48);
+      S.tides.push({ y: TOP() - 40, gx, gw, warn: 1.3, speed: (BOTTOM() - TOP() + 120) / 2.3, hit: false });
+      SFX.warn();
+    }
+    if (B.cast === "bombard") {                    // 총공격: 바다 전체에 포탄, 초록 원만 안전
+      const safes = [freeSpot(-40), freeSpot(-40)];
+      if (Math.hypot(safes[0].x - safes[1].x, safes[0].y - safes[1].y) < 120) safes.pop();
+      S.safes = safes.map((p) => ({ x: p.x, y: p.y, t: 2.4 }));
+      const cols = 6, rows = 6, x0 = 34, x1 = W - 34, y0 = TOP() + 14, y1 = BOTTOM() - 6;
+      for (let r = 0; r < rows; r++) for (let c = 0; c < cols; c++) {
+        const x = x0 + (x1 - x0) * (c + (r % 2 ? .5 : 0)) / (cols - (r % 2 ? 0 : 1)) + (Math.random() - .5) * 16;
+        const y = y0 + (y1 - y0) * r / (rows - 1) + (Math.random() - .5) * 14;
+        if (S.safes.some((s) => Math.hypot(s.x - x, (s.y - y) * 1.3) < 80)) continue;
+        S.drops.push({ x: Math.max(24, Math.min(W - 24, x)), y, t: 1.6 + Math.random() * .6, fall: 0 });
+      }
+      SFX.warn();
+    }
+    if (B.cast === "whirl") { S.whirl = 4; SFX.warn(); }   // 소용돌이: 4초 동안 길드장 쪽으로 빨려 듦
     if (B.cast === "mine") {
       const n = 3 + Math.round(level * 2), bp = BOSS();
       for (let i = 0; i < n; i++) {
@@ -562,7 +584,7 @@ canvas { display: block; width: 100%; height: 100%; }
   const startFever = () => {
     const F = S.fever, B = S.boss, bp = BOSS();
     F.t = FEVER_TIME; F.from = F.next; F.idx++; F.used = F.idx >= FEVERS.length; F.next = F.used ? Infinity : FEVERS.at(F.idx); F.spawn = 0; F.banner = 1.6;
-    B.stun = GROGGY_TIME; B.cast = null; B.seq = []; S.mines = []; S.drops = []; S.slow = 0;
+    B.stun = GROGGY_TIME; B.cast = null; B.seq = []; S.mines = []; S.drops = []; S.tides = []; S.safes = []; S.whirl = 0; S.slow = 0;
     S.balls.forEach((b) => burst(b.x, b.y, "#ffffff", 6)); S.balls = [];
     burst(bp.x, bp.y - 20, "#f6c544", 34); shake = .4;
     for (let k = 0; k < 10; k++) S.fx.push({ x: bp.x + (Math.random() - .5) * 50, y: bp.y - 20, vx: (Math.random() - .5) * 2.5, vy: -Math.random() * 1.5, life: 1.2, c: "rgba(90,96,110,.8)", r: 6 + Math.random() * 6, smoke: true });
@@ -587,6 +609,11 @@ canvas { display: block; width: 100%; height: 100%; }
     if (dx || dy) { sh.vx += dx / dl * acc * dt; sh.vy += dy / dl * acc * dt; }
     else { const f = Math.pow(.02, dt); sh.vx *= f; sh.vy *= f; }
     const cap = max * analog, sp = Math.hypot(sh.vx, sh.vy); if (sp > cap) { sh.vx *= cap / sp; sh.vy *= cap / sp; }
+    if (S.whirl > 0) {
+      S.whirl = Math.max(0, S.whirl - dt);
+      const wb = BOSS(), wx = wb.x - sh.x, wy = wb.y - sh.y, wd = Math.hypot(wx, wy) || 1, k = Math.min(1, S.whirl);
+      sh.x += (wx / wd * 105 - wy / wd * 70) * dt * k; sh.y += (wy / wd * 105 + wx / wd * 70) * dt * k;
+    }
     sh.x += sh.vx * dt; sh.y += sh.vy * dt;
     sh.x = Math.max(44, Math.min(W - 44, sh.x)); sh.y = Math.max(TOP() + 20, Math.min(BOTTOM() - 10, sh.y));
     // 길드장 배와 부딪히면 밀려남
@@ -683,6 +710,23 @@ canvas { display: block; width: 100%; height: 100%; }
       }
     }
     S.balls = S.balls.filter((b) => !b.dead);
+
+    // 대해일
+    for (const w of S.tides) {
+      if (w.warn > 0) { w.warn -= dt; continue; }
+      w.y += w.speed * dt;
+      const inGap = Math.abs(sh.x - w.gx) < w.gw / 2 - 18;
+      if (!w.hit && Math.abs(sh.y - w.y) < 20) {
+        w.hit = true;
+        if (!inGap) { if (shielded()) { burst(sh.x, sh.y - 20, "#9fd0ff", 14, "막았다!"); SFX.block(); } else if (sh.inv <= 0) { hurt(sh.x, sh.y - 10); sh.vy += 220; } }
+        else burst(sh.x, sh.y - 30, "#3fd06a", 10, "통과!");
+      }
+      if (Math.random() < .6) S.spray.push({ x: Math.random() * W, y: w.y - 4, vx: (Math.random() - .5) * 40, vy: -40 - Math.random() * 60, z: 0, life: .5 });
+      if (w.y > H + 40) w.dead = true;
+    }
+    S.tides = S.tides.filter((w) => !w.dead);
+    for (const s of S.safes) s.t -= dt;
+    S.safes = S.safes.filter((s) => s.t > 0);
 
     // 기뢰: 날아와 떨어진 뒤 깜빡이다 폭발, 닿으면 바로 터짐
     for (const m of S.mines) {
@@ -1005,6 +1049,62 @@ canvas { display: block; width: 100%; height: 100%; }
     if (lit) { ctx.fillStyle = "rgba(255,74,58,.35)"; ctx.beginPath(); ctx.arc(0, -3, 8, 0, 7); ctx.fill(); }
     ctx.restore();
   };
+  const drawTides = (time) => {
+    for (const w of S.tides) {
+      const l = w.gx - w.gw / 2, r = w.gx + w.gw / 2;
+      if (w.warn > 0) {
+        const a = .5 + Math.sin(time * 16) * .3;
+        ctx.save();
+        ctx.fillStyle = `rgba(217,56,42,${.12 * a})`; ctx.fillRect(0, TOP() - 20, l, BOTTOM() - TOP() + 40); ctx.fillRect(r, TOP() - 20, W - r, BOTTOM() - TOP() + 40);
+        ctx.strokeStyle = `rgba(63,208,106,${.9 * a})`; ctx.lineWidth = 3; ctx.setLineDash([8, 6]);
+        ctx.strokeRect(l, TOP() - 20, w.gw, BOTTOM() - TOP() + 40); ctx.setLineDash([]);
+        ctx.font = "26px 'Do Hyeon', sans-serif"; ctx.textAlign = "center"; ctx.lineWidth = 6; ctx.strokeStyle = "#12284e";
+        ctx.strokeText("안전", w.gx, TOP() + 30); ctx.fillStyle = "#7dffa6"; ctx.fillText("안전", w.gx, TOP() + 30);
+        ctx.strokeText("대해일이 온다!", W / 2, TOP() - 26); ctx.fillStyle = "#fff"; ctx.fillText("대해일이 온다!", W / 2, TOP() - 26);
+        ctx.restore();
+        continue;
+      }
+      const band = (x0, x1) => {
+        if (x1 - x0 < 2) return;
+        const g = ctx.createLinearGradient(0, w.y - 34, 0, w.y + 14);
+        g.addColorStop(0, "rgba(255,255,255,.95)"); g.addColorStop(.35, "#7fc3ff"); g.addColorStop(1, "rgba(36,90,170,.85)");
+        ctx.fillStyle = g; ctx.beginPath(); ctx.moveTo(x0, w.y + 14);
+        for (let x = x0; x <= x1; x += 8) ctx.lineTo(x, w.y - 22 - Math.sin(x * .07 + time * 9) * 8 - Math.sin(x * .023 - time * 3) * 5);
+        ctx.lineTo(x1, w.y + 14); ctx.closePath(); ctx.fill();
+        ctx.strokeStyle = "rgba(255,255,255,.95)"; ctx.lineWidth = 3; ctx.beginPath();
+        for (let x = x0; x <= x1; x += 8) { const yy = w.y - 22 - Math.sin(x * .07 + time * 9) * 8 - Math.sin(x * .023 - time * 3) * 5; x === x0 ? ctx.moveTo(x, yy) : ctx.lineTo(x, yy); }
+        ctx.stroke();
+      };
+      band(0, l); band(r, W);
+      ctx.strokeStyle = "rgba(125,255,166,.8)"; ctx.lineWidth = 2; ctx.setLineDash([6, 5]);
+      ctx.beginPath(); ctx.moveTo(l, w.y - 30); ctx.lineTo(l, w.y + 14); ctx.moveTo(r, w.y - 30); ctx.lineTo(r, w.y + 14); ctx.stroke(); ctx.setLineDash([]);
+    }
+  };
+  const drawSafes = (time) => {
+    for (const s of S.safes) {
+      const d = depth(s.y), a = Math.min(1, s.t * 2), pulse = 1 + Math.sin(time * 8) * .05;
+      ctx.save(); ctx.globalAlpha = a;
+      ctx.fillStyle = "rgba(63,208,106,.22)"; ctx.strokeStyle = "#3fd06a"; ctx.lineWidth = 3;
+      ctx.beginPath(); ctx.ellipse(s.x, s.y, 58 * d * pulse, 22 * d * pulse, 0, 0, 7); ctx.fill(); ctx.stroke();
+      ctx.font = "20px 'Do Hyeon', sans-serif"; ctx.textAlign = "center"; ctx.lineWidth = 5; ctx.strokeStyle = "#12284e";
+      ctx.strokeText("안전", s.x, s.y + 7); ctx.fillStyle = "#7dffa6"; ctx.fillText("안전", s.x, s.y + 7);
+      ctx.restore();
+    }
+  };
+  const drawWhirl = (time) => {
+    if (S.whirl <= 0) return;
+    const b = BOSS(), a = Math.min(1, S.whirl) * .55;
+    ctx.save(); ctx.translate(b.x, b.y + 10); ctx.scale(1, .45);
+    ctx.lineCap = "round";
+    for (let i = 0; i < 7; i++) {
+      const r = 90 + i * 70, off = -time * (3.2 - i * .25) + i;
+      ctx.strokeStyle = `rgba(255,255,255,${a * (1 - i / 8)})`; ctx.lineWidth = 4 - i * .35;
+      for (let k = 0; k < 3; k++) { ctx.beginPath(); ctx.arc(0, 0, r, off + k * 2.1, off + k * 2.1 + 1.1); ctx.stroke(); }
+    }
+    ctx.restore();
+    ctx.save(); ctx.font = "22px 'Do Hyeon', sans-serif"; ctx.textAlign = "center"; ctx.lineWidth = 6; ctx.strokeStyle = "#12284e";
+    ctx.globalAlpha = Math.min(1, S.whirl); ctx.strokeText("소용돌이!", W / 2, TOP() - 24); ctx.fillStyle = "#fff"; ctx.fillText("소용돌이!", W / 2, TOP() - 24); ctx.restore();
+  };
   const drawFx = () => {
     for (const f of S.fx) {
       ctx.globalAlpha = Math.max(0, Math.min(1, f.life));
@@ -1023,6 +1123,8 @@ canvas { display: block; width: 100%; height: 100%; }
     if (shake > 0 && !reduce) ctx.translate((Math.random() - .5) * 10 * shake, (Math.random() - .5) * 10 * shake);
     drawSea(time);
     const keep = S; if (!S) S = idle;
+    drawWhirl(time);
+    drawSafes(time);
     drawDrops(time);
     drawMines(time);
     const bossY = BOSS().y;
@@ -1030,6 +1132,7 @@ canvas { display: block; width: 100%; height: 100%; }
     if (keep) layer.push({ y: S.ship.y, f: () => drawShip(time) });
     layer.sort((a, b) => a.y - b.y).forEach((l) => l.f());
     S.balls.forEach(drawBall);
+    drawTides(time);
     drawStun(time);
     drawBubble();
     drawFx();
