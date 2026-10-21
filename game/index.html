@@ -161,7 +161,7 @@ canvas { display: block; width: 100%; height: 100%; }
       <p class="skillhint">길드장은 여덟 가지 포격 패턴으로 방해해요. 위험하면 <b>Space</b>로 3초 동안 막으세요. 3500점을 넘기면 딱 한 번 <b>피버 타임</b>이 와서 길드장이 기절하고 동전이 쏟아져요!</p>
       <p class="how">방향키나 WASD로 움직이고, 마우스로 가고 싶은 곳을 눌러도 돼요.<br>빠르게 이어 먹으면 콤보 배수가 올라가요.</p>
       <div class="ranks" aria-label="등급표">
-        <div class="rk" data-min="12000"><span class="rk-name">전설의 대해적</span><span class="rk-score">12,000점</span></div>
+        <div class="rk" data-min="20000"><span class="rk-name">전설의 대해적</span><span class="rk-score">20,000점</span></div>
         <div class="rk" data-min="6000"><span class="rk-name">람쥐해적단 선장</span><span class="rk-score">6,000점</span></div>
         <div class="rk" data-min="3000"><span class="rk-name">항해사</span><span class="rk-score">3,000점</span></div>
         <div class="rk pass" data-min="1500"><span class="rk-name">갑판장</span><span class="rk-tag">합격선</span><span class="rk-score">1,500점</span></div>
@@ -434,7 +434,7 @@ canvas { display: block; width: 100%; height: 100%; }
     $("hud").hidden = true; $("combo").hidden = true; $("skills").hidden = true; $("fever").hidden = true; $("pad").hidden = true; releaseStick(); $("end").hidden = false;
     $("again").focus();
   };
-  const rankOf = (s) => s >= 12000 ? "전설의 대해적" : s >= 6000 ? "람쥐해적단 선장" : s >= 3000 ? "항해사" : s >= 1500 ? "갑판장" : "견습 선원";
+  const rankOf = (s) => s >= 20000 ? "전설의 대해적" : s >= 6000 ? "람쥐해적단 선장" : s >= 3000 ? "항해사" : s >= 1500 ? "갑판장" : "견습 선원";
 
   // ---------- 보물 배치 ----------
   const freeSpot = (pad) => {
