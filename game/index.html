@@ -91,6 +91,26 @@ canvas { display: block; width: 100%; height: 100%; }
 </style>
 
 <style>
+.pad { position: absolute; left: max(18px, env(safe-area-inset-left, 0px)); bottom: 26px; touch-action: none; }
+.stick-base { position: relative; width: 132px; height: 132px; border-radius: 50%; background: rgba(18,40,78,.28); border: 3px solid rgba(255,255,255,.85); box-shadow: 0 4px 0 rgba(18,40,78,.5), inset 0 0 0 10px rgba(255,255,255,.12); touch-action: none; }
+.stick-base::before, .stick-base::after { content: ""; position: absolute; left: 50%; top: 50%; background: rgba(255,255,255,.45); border-radius: 2px; transform: translate(-50%, -50%); }
+.stick-base::before { width: 70%; height: 3px; }
+.stick-base::after { width: 3px; height: 70%; }
+.stick { position: absolute; left: 50%; top: 50%; width: 58px; height: 58px; margin: -29px 0 0 -29px; border-radius: 50%; background: radial-gradient(circle at 38% 34%, #fff2bf, #f6c544 55%, #d9a21c); border: 3px solid var(--navy); box-shadow: 0 4px 0 var(--navy); z-index: 1; }
+.stick-base.active { background: rgba(18,40,78,.38); }
+.frame.touch .skills { left: auto; right: max(22px, env(safe-area-inset-right, 0px)); bottom: 40px; justify-content: flex-end; }
+.frame.touch .sk { width: 84px; height: 84px; border-radius: 50%; }
+.frame.touch .sk svg { width: 44px; height: 44px; }
+.frame.touch .sk .cd { border-radius: 50%; font-size: 28px; }
+.frame.touch .sk .key { display: none; }
+.frame.touch .sk .name { font-size: 15px; bottom: -24px; }
+@media (pointer: coarse) and (max-width: 640px) {
+  body { padding: 0 !important; }
+  .frame { width: 100%; height: 100%; max-width: none; aspect-ratio: auto; border: 0; border-radius: 0; box-shadow: none; }
+  .hud { padding-top: calc(10px + env(safe-area-inset-top, 0px)); }
+}
+</style>
+<style>
 .fever { position: absolute; left: 50%; top: 58px; transform: translateX(-50%); width: min(62%, 300px); height: 20px; border: 3px solid var(--navy); border-radius: 999px; background: rgba(255,255,255,.85); overflow: hidden; box-shadow: 0 3px 0 var(--navy); pointer-events: none; }
 .fever i { position: absolute; inset: 0 auto 0 0; width: 0; background: linear-gradient(90deg, #f6c544, #ffdf7a); }
 .fever span { position: relative; display: block; text-align: center; font: 13px/14px var(--display); color: var(--navy); }
@@ -112,6 +132,7 @@ canvas { display: block; width: 100%; height: 100%; }
   </div>
   <div class="fever" id="fever" hidden><i id="feverBar"></i><span id="feverLabel">피버까지 3,500점</span></div>
   <div class="combo" id="combo" hidden></div>
+  <div class="pad" id="pad" hidden><div class="stick-base" id="stickBase" aria-label="이동 조이스틱"><div class="stick" id="stick"></div></div></div>
   <div class="skills" id="skills" hidden><button class="sk" type="button" id="shieldBtn" aria-label="방패 (스페이스바)"><svg viewBox='0 0 32 32'><path d='M16 3l11 4.5v7.5c0 7-5 11.5-11 14C10 26.5 5 22 5 15V7.5z' fill='#79a6e6' stroke='#12284e' stroke-width='2.6' stroke-linejoin='round'/><path d='M16 7.5l7 2.8v4.9c0 4.5-3.2 7.6-7 9.4z' fill='#d6e8ff'/></svg><span class="key" style="width:auto;padding:0 5px">Space</span><span class="cd"></span><span class="name">방패</span></button></div>
 
   <div class="overlay" id="start">
@@ -175,7 +196,7 @@ canvas { display: block; width: 100%; height: 100%; }
 
   // 바다 평면: 수평선 아래가 놀이 공간, 멀수록 작게 그려 원근감을 줌
   const HY = () => H * .11;
-  const TOP = () => HY() + 46, BOTTOM = () => H - 96;
+  const TOP = () => HY() + 46, BOTTOM = () => H - (frame.classList.contains("touch") ? 150 : 96);
   const depth = (y) => .68 + .32 * Math.max(0, Math.min(1, (y - HY()) / (H - HY())));
   const BOSS = () => ({ x: W / 2, y: HY() + (H - HY()) * .42 });
 
@@ -347,9 +368,28 @@ canvas { display: block; width: 100%; height: 100%; }
     if ((e.code === "Space" || e.code === "KeyQ" || e.code === "KeyJ") && running) { e.preventDefault(); if (!e.repeat) useShield(); }
   });
   addEventListener("keyup", (e) => { const k = MOVE[e.key.toLowerCase()] || CODE[e.code]; if (k) keys[k] = false; });
+  const TOUCH = matchMedia("(pointer: coarse)").matches;
+  if (TOUCH) frame.classList.add("touch");
+  const joy = { on: false, x: 0, y: 0, id: null };
+  const stickBase = $("stickBase"), stick = $("stick");
+  const moveStick = (e) => {
+    const r = stickBase.getBoundingClientRect(), R = r.width * .36;
+    let dx = e.clientX - (r.left + r.width / 2), dy = e.clientY - (r.top + r.height / 2);
+    const d = Math.hypot(dx, dy); if (d > R) { dx *= R / d; dy *= R / d; }
+    joy.x = dx / R; joy.y = dy / R;
+    stick.style.transform = `translate(${dx}px, ${dy}px)`;
+  };
+  const releaseStick = () => { joy.on = false; joy.x = joy.y = 0; joy.id = null; stick.style.transform = ""; stickBase.classList.remove("active"); };
+  stickBase.addEventListener("pointerdown", (e) => {
+    e.preventDefault(); e.stopPropagation();
+    joy.on = true; joy.id = e.pointerId; stickBase.setPointerCapture(e.pointerId); stickBase.classList.add("active"); moveStick(e);
+  });
+  stickBase.addEventListener("pointermove", (e) => { if (joy.on && e.pointerId === joy.id) moveStick(e); });
+  stickBase.addEventListener("pointerup", releaseStick);
+  stickBase.addEventListener("pointercancel", releaseStick);
   let target = null;
   const toGame = (e) => { const r = frame.getBoundingClientRect(); return { x: (e.clientX - r.left) / r.width * W, y: (e.clientY - r.top) / r.height * H }; };
-  frame.addEventListener("pointerdown", (e) => { if (e.target.closest(".sk")) return; if (running) { target = toGame(e); frame.setPointerCapture(e.pointerId); } });
+  frame.addEventListener("pointerdown", (e) => { if (TOUCH || e.target.closest(".sk") || e.target.closest(".pad")) return; if (running) { target = toGame(e); frame.setPointerCapture(e.pointerId); } });
   frame.addEventListener("pointermove", (e) => { if (target) target = toGame(e); });
   addEventListener("pointerup", () => { target = null; });
 
@@ -358,7 +398,7 @@ canvas { display: block; width: 100%; height: 100%; }
     if (!ac) { try { ac = new (window.AudioContext || window.webkitAudioContext)(); } catch (e) {} }
     S = fresh(); running = true;
     for (let i = 0; i < 6; i++) spawnSet(true);
-    $("start").hidden = true; $("end").hidden = true; $("hud").hidden = false; $("skills").hidden = false; $("fever").hidden = false;
+    $("start").hidden = true; $("end").hidden = true; $("hud").hidden = false; $("skills").hidden = false; $("fever").hidden = false; $("pad").hidden = !TOUCH;
     hudCache = ""; updateHud(); last = performance.now();
   };
   const finish = (sunk) => {
@@ -372,7 +412,7 @@ canvas { display: block; width: 100%; height: 100%; }
     $("rank").textContent = rankOf(S.score);
     $("best").textContent = best.toLocaleString(); $("maxc").textContent = S.maxCombo; $("loot").textContent = S.caught;
     $("copyline").textContent = "";
-    $("hud").hidden = true; $("combo").hidden = true; $("skills").hidden = true; $("fever").hidden = true; $("end").hidden = false;
+    $("hud").hidden = true; $("combo").hidden = true; $("skills").hidden = true; $("fever").hidden = true; $("pad").hidden = true; releaseStick(); $("end").hidden = false;
     $("again").focus();
   };
   const rankOf = (s) => s >= 12000 ? "전설의 대해적" : s >= 6000 ? "람쥐해적단 선장" : s >= 3000 ? "항해사" : s >= 1500 ? "갑판장" : "견습 선원";
@@ -518,11 +558,13 @@ canvas { display: block; width: 100%; height: 100%; }
     S.shield.cd = Math.max(0, S.shield.cd - dt); S.shield.act = Math.max(0, S.shield.act - dt);
     const max = feverOn() ? 340 : S.slow > 0 ? 95 : 215, acc = feverOn() ? 2100 : 1300;
     let dx = (keys.r ? 1 : 0) - (keys.l ? 1 : 0), dy = (keys.d ? 1 : 0) - (keys.u ? 1 : 0);
+    let analog = 1;
+    if (joy.on && Math.hypot(joy.x, joy.y) > .12) { dx = joy.x; dy = joy.y; analog = Math.min(1, Math.max(.35, Math.hypot(joy.x, joy.y))); }
     if (target) { const tx = target.x - sh.x, ty = target.y - sh.y, d = Math.hypot(tx, ty); if (d > 8) { dx = tx / d; dy = ty / d; } else { dx = dy = 0; } }
     const dl = Math.hypot(dx, dy) || 1;
     if (dx || dy) { sh.vx += dx / dl * acc * dt; sh.vy += dy / dl * acc * dt; }
     else { const f = Math.pow(.02, dt); sh.vx *= f; sh.vy *= f; }
-    const sp = Math.hypot(sh.vx, sh.vy); if (sp > max) { sh.vx *= max / sp; sh.vy *= max / sp; }
+    const cap = max * analog, sp = Math.hypot(sh.vx, sh.vy); if (sp > cap) { sh.vx *= cap / sp; sh.vy *= cap / sp; }
     sh.x += sh.vx * dt; sh.y += sh.vy * dt;
     sh.x = Math.max(44, Math.min(W - 44, sh.x)); sh.y = Math.max(TOP() + 20, Math.min(BOTTOM() - 10, sh.y));
     // 길드장 배와 부딪히면 밀려남
@@ -984,6 +1026,10 @@ canvas { display: block; width: 100%; height: 100%; }
 
   // ---------- 버튼 ----------
   $("shieldBtn").addEventListener("click", (e) => { e.stopPropagation(); if (running) useShield(); });
+  if (TOUCH) {
+    document.querySelector(".how").innerHTML = "왼쪽 조이스틱으로 움직이고, 오른쪽 방패 버튼으로 막으세요.<br>빠르게 이어 먹으면 콤보 배수가 올라가요. 1500점이면 합격!";
+    const hint = document.querySelector(".skillhint"); hint.innerHTML = hint.innerHTML.replace("<b>Space</b>로", "<b>방패</b> 버튼으로");
+  }
   $("go").addEventListener("click", start);
   $("again").addEventListener("click", start);
   $("bestStart").textContent = getBest().toLocaleString();
