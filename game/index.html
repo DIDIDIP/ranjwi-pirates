@@ -91,6 +91,18 @@ canvas { display: block; width: 100%; height: 100%; }
 </style>
 
 <style>
+.ranks { width: 100%; display: grid; gap: 4px; }
+.rk { display: flex; align-items: center; gap: 8px; padding: 3px 12px; border-radius: 10px; background: #f2f7fe; font-size: 14px; }
+.rk-name { font-family: var(--display); font-size: 16px; color: var(--navy); }
+.rk-score { margin-left: auto; color: var(--muted); font-variant-numeric: tabular-nums; }
+.rk:first-child { background: linear-gradient(90deg, #ffe58a, #fff6d2); }
+.rk:first-child .rk-name { color: #8a5a00; }
+.rk.pass { border: 2px dashed #1b7d36; background: #e7f7ec; }
+.rk-tag { font-size: 12px; color: #fff; background: #1b7d36; border-radius: 6px; padding: 0 6px; }
+.rk.mine { outline: 3px solid var(--gold); outline-offset: -1px; }
+.rk.mine .rk-name::after { content: " 내 최고"; font-family: var(--round); font-size: 12px; color: #b9740b; }
+</style>
+<style>
 .pad { position: absolute; left: max(18px, env(safe-area-inset-left, 0px)); bottom: 26px; touch-action: none; }
 .stick-base { position: relative; width: 132px; height: 132px; border-radius: 50%; background: rgba(18,40,78,.28); border: 3px solid rgba(255,255,255,.85); box-shadow: 0 4px 0 rgba(18,40,78,.5), inset 0 0 0 10px rgba(255,255,255,.12); touch-action: none; }
 .stick-base::before, .stick-base::after { content: ""; position: absolute; left: 50%; top: 50%; background: rgba(255,255,255,.45); border-radius: 2px; transform: translate(-50%, -50%); }
@@ -147,7 +159,14 @@ canvas { display: block; width: 100%; height: 100%; }
       </div>
       <p class="story">바다 한가운데 길드장 배가 있어요.<br>배를 몰고 다니며 보물을 최대한 많이 모으세요!</p>
       <p class="skillhint">길드장은 여덟 가지 포격 패턴으로 방해해요. 위험하면 <b>Space</b>로 3초 동안 막으세요. 3500점과 10000점에 <b>피버 타임</b>이 와서 길드장이 기절하고 동전이 쏟아져요!</p>
-      <p class="how">방향키나 WASD로 움직이고, 휴대폰은 가고 싶은 곳을 누르세요.<br>빠르게 이어 먹으면 콤보 배수가 올라가요. 1500점이면 합격!</p>
+      <p class="how">방향키나 WASD로 움직이고, 마우스로 가고 싶은 곳을 눌러도 돼요.<br>빠르게 이어 먹으면 콤보 배수가 올라가요.</p>
+      <div class="ranks" aria-label="등급표">
+        <div class="rk" data-min="12000"><span class="rk-name">전설의 대해적</span><span class="rk-score">12,000점</span></div>
+        <div class="rk" data-min="6000"><span class="rk-name">람쥐해적단 선장</span><span class="rk-score">6,000점</span></div>
+        <div class="rk" data-min="3000"><span class="rk-name">항해사</span><span class="rk-score">3,000점</span></div>
+        <div class="rk pass" data-min="1500"><span class="rk-name">갑판장</span><span class="rk-tag">합격선</span><span class="rk-score">1,500점</span></div>
+        <div class="rk" data-min="0"><span class="rk-name">견습 선원</span><span class="rk-score">0점</span></div>
+      </div>
       <button class="btn" id="go" type="button">출항하기!</button>
       <span class="stats">최고 기록 <b id="bestStart">0</b></span>
     </div>
@@ -403,7 +422,7 @@ canvas { display: block; width: 100%; height: 100%; }
   };
   const finish = (sunk) => {
     running = false; SFX.end();
-    const best = Math.max(getBest(), S.score); setBest(best);
+    const best = Math.max(getBest(), S.score); setBest(best); $("bestStart").textContent = best.toLocaleString(); markBest();
     $("endTitle").textContent = sunk ? "배가 가라앉았어요" : "입단 심사 결과";
     const pass = S.score >= PASS;
     $("verdict").textContent = pass ? "합격! 람쥐해적단 선원 자격 획득" : "아쉽게 불합격, 다시 도전해 보세요";
@@ -1027,12 +1046,17 @@ canvas { display: block; width: 100%; height: 100%; }
   // ---------- 버튼 ----------
   $("shieldBtn").addEventListener("click", (e) => { e.stopPropagation(); if (running) useShield(); });
   if (TOUCH) {
-    document.querySelector(".how").innerHTML = "왼쪽 조이스틱으로 움직이고, 오른쪽 방패 버튼으로 막으세요.<br>빠르게 이어 먹으면 콤보 배수가 올라가요. 1500점이면 합격!";
+    document.querySelector(".how").innerHTML = "왼쪽 조이스틱으로 움직이고, 오른쪽 방패 버튼으로 막으세요.<br>빠르게 이어 먹으면 콤보 배수가 올라가요.";
     const hint = document.querySelector(".skillhint"); hint.innerHTML = hint.innerHTML.replace("<b>Space</b>로", "<b>방패</b> 버튼으로");
   }
   $("go").addEventListener("click", start);
   $("again").addEventListener("click", start);
   $("bestStart").textContent = getBest().toLocaleString();
+  const markBest = () => {
+    const best = getBest(); let hit = false;
+    document.querySelectorAll(".rk").forEach((el) => { const on = !hit && best > 0 && best >= +el.dataset.min; el.classList.toggle("mine", on); if (on) hit = true; });
+  };
+  markBest();
   $("brag").addEventListener("click", () => {
     const txt = `람쥐해적단 길드 가입 대작전 ${S.score.toLocaleString()}점, ${rankOf(S.score)} 달성!\n같이 항해할 선원 모집 중: https://dididip.github.io/ranjwi-pirates/`;
     const ok = () => { $("copyline").textContent = "복사했어요! 디스코드나 카톡에 붙여 넣으세요."; };
